@@ -14,95 +14,95 @@ fi
 
 printf "\n\n\nINSTALLING COUCHDB 2.x\n\n\n"
 
-# printf "\n=====================================================\n"
-# echo Upgrading the Package Manager:
-# printf "=====================================================\n"
+printf "\n=====================================================\n"
+echo Upgrading the Package Manager:
+printf "=====================================================\n"
 
-# apt-get upgrade -y
+apt-get upgrade -y
 
-# printf "\n=====================================================\n"
-# echo Updating Packages:
-# printf "=====================================================\n"
+printf "\n=====================================================\n"
+echo Updating Packages:
+printf "=====================================================\n"
 
-# apt-get update -y
+apt-get update -y
 
-# printf "\n=====================================================\n"
-# echo Installing Dependencies:
-# printf "=====================================================\n"
+printf "\n=====================================================\n"
+echo Installing Dependencies:
+printf "=====================================================\n"
 
-# apt-get --no-install-recommends -y install \
-#     build-essential pkg-config erlang \
-#     libicu-dev libmozjs185-dev libcurl4-openssl-dev
+apt-get --no-install-recommends -y install \
+    build-essential pkg-config erlang \
+    libicu-dev libmozjs185-dev libcurl4-openssl-dev
 
-# printf "\n=====================================================\n"
-# echo Downloading CouchDB:
-# printf "=====================================================\n"
+printf "\n=====================================================\n"
+echo Downloading CouchDB:
+printf "=====================================================\n"
 
-# DOWNLOAD_URL=http://apache.javapipe.com/couchdb/source/2.0.0/apache-couchdb-2.0.0.tar.gz
-# DOWNLOAD_DIR=/tmp/couchdb/
-# ARCHIVE_DIRNAME=apache-couchdb-2.0.0
-# ARCHIVE_FILENAME=$ARCHIVE_DIRNAME.tar.gz
-
-
-# rm -rf $DOWNLOAD_DIR
-# wget --directory-prefix=$DOWNLOAD_DIR $DOWNLOAD_URL
-
-# printf "\n=====================================================\n"
-# echo Decompressing Archive:
-# printf "=====================================================\n"
-
-# tar -xzvf $DOWNLOAD_DIR$ARCHIVE_FILENAME -C $DOWNLOAD_DIR
+DOWNLOAD_URL=http://apache.javapipe.com/couchdb/source/2.0.0/apache-couchdb-2.0.0.tar.gz
+DOWNLOAD_DIR=/tmp/couchdb/
+ARCHIVE_DIRNAME=apache-couchdb-2.0.0
+ARCHIVE_FILENAME=$ARCHIVE_DIRNAME.tar.gz
 
 
-# printf "\n=====================================================\n"
-# echo Running Configuration:
-# printf "=====================================================\n"
+rm -rf $DOWNLOAD_DIR
+wget --directory-prefix=$DOWNLOAD_DIR $DOWNLOAD_URL
 
-# cd $DOWNLOAD_DIR$ARCHIVE_DIRNAME
-# sh configure
+printf "\n=====================================================\n"
+echo Decompressing Archive:
+printf "=====================================================\n"
 
-# printf "\n=====================================================\n"
-# echo Making CouchDB:
-# printf "=====================================================\n"
+tar -xzvf $DOWNLOAD_DIR$ARCHIVE_FILENAME -C $DOWNLOAD_DIR
 
-# make release
 
-# printf "\n=====================================================\n"
-# echo Copying Files:
-# printf "=====================================================\n"
+printf "\n=====================================================\n"
+echo Running Configuration:
+printf "=====================================================\n"
+
+cd $DOWNLOAD_DIR$ARCHIVE_DIRNAME
+sh configure
+
+printf "\n=====================================================\n"
+echo Making CouchDB:
+printf "=====================================================\n"
+
+make release
+
+printf "\n=====================================================\n"
+echo Copying Files:
+printf "=====================================================\n"
 
 TARGET_DIR=/home/couchdb
 
-# rm -rf $TARGET_DIR
-# cp -r $DOWNLOAD_DIR$ARCHIVE_DIRNAME/rel/couchdb $TARGET_DIR/
-# echo 'Done.'
+rm -rf $TARGET_DIR
+cp -r $DOWNLOAD_DIR$ARCHIVE_DIRNAME/rel/couchdb $TARGET_DIR/
+echo 'Done.'
 
-# printf "\n=====================================================\n"
-# echo Creating CouchDB System User:
-# printf "=====================================================\n"
+printf "\n=====================================================\n"
+echo Creating CouchDB System User:
+printf "=====================================================\n"
 
-# adduser --system \
-#         --no-create-home \
-#         --shell /bin/bash \
-#         --group --gecos \
-#         "CouchDB Administrator" couchdb
+adduser --system \
+        --no-create-home \
+        --shell /bin/bash \
+        --group --gecos \
+        "CouchDB Administrator" couchdb
 
-# printf "\n=====================================================\n"
-# echo Setting Permissions:
-# printf "=====================================================\n"
+printf "\n=====================================================\n"
+echo Setting Permissions:
+printf "=====================================================\n"
 
-# chown -R couchdb:couchdb $TARGET_DIR
-# find $TARGET_DIR -type d -exec chmod 0770 {} \;
-# chmod 0644 $TARGET_DIR/etc/*
-# echo 'Done.'
+chown -R couchdb:couchdb $TARGET_DIR
+find $TARGET_DIR -type d -exec chmod 0770 {} \;
+chmod 0644 $TARGET_DIR/etc/*
+echo 'Done.'
 
 
-# printf "\n=====================================================\n"
-# echo Cleaning Up:
-# printf "=====================================================\n"
+printf "\n=====================================================\n"
+echo Cleaning Up:
+printf "=====================================================\n"
 
-# rm -rf $DOWNLOAD_DIR
-# echo 'Done.'
+rm -rf $DOWNLOAD_DIR
+echo 'Done.'
 
 printf "\n=====================================================\n"
 echo Setting Up and Starting CouchDB service:
@@ -112,7 +112,7 @@ cat <<EOT > /etc/systemd/system/couchdb.service
 [Unit]
 Description=Couchdb service
 After=network.target
- 
+
 [Service]
 Type=simple
 User=couchdb
@@ -123,6 +123,8 @@ EOT
 systemctl  daemon-reload
 systemctl  start couchdb.service
 systemctl  enable couchdb.service
+
+echo 'Done.'
 
 printf "\n=====================================================\n"
 echo Waiting for CouchDB Service:
