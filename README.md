@@ -8,7 +8,7 @@ A straight-forward Bash script to install and configure CouchDB 2.x on Ubuntu 16
 * **Installs CouchDB** in /home/couchdb, by downloading from an official source, and then building it.
 * Sets up CouchDB as a **service** that runs on system startup and reloads if stopped.
 * Creates a couchdb system **user**.
-* Checks CouchDB installation and attempts a **single node setup**.
+* Checks CouchDB installation and attempts a **single node setup**: TODO.
 
 ### Acknowledgements
 The script is based on information from the official docs and other sources:
