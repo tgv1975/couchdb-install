@@ -3,6 +3,7 @@
 # Based on information from:
 #   http://docs.couchdb.org/en/2.0.0/install/unix.html
 #   http://docs.couchdb.org/en/2.0.0/install/
+#   http://docs.couchdb.org/en/2.0.0/cluster/nodes.html
 #   https://www.jamescoyle.net/how-to/2527-add-systemd-startup-script-for-couchdb
 
 
@@ -12,7 +13,25 @@ if [ $USER != "root" ]; then
    exit
 fi
 
+printf "\n\nAbout to perform a CLEAN INSTALL of CouchDB 2.x on your system.\n"
+printf "This will erase any data you may have in the /home/couchdb dir.\n"
+
+if [[ $1 == '-y' || $1 == "-Y" ]]; then
+    CONTINUE='y'
+else
+    printf "\n\nContinue? [y/n]\n"
+    read CONTINUE
+fi
+
+if [[ $CONTINUE != 'y' && $CONTINUE != 'Y' ]]; then
+    exit
+fi
+
 printf "\n\n\nINSTALLING COUCHDB 2.x\n\n\n"
+
+systemctl stop couchdb.service
+
+sleep 3
 
 printf "\n=====================================================\n"
 echo Upgrading the Package Manager:
@@ -116,7 +135,7 @@ After=network.target
 [Service]
 Type=simple
 User=couchdb
-ExecStart=/$TARGET_DIR/bin/couchdb -o /dev/stdout -e /dev/stderr
+ExecStart=$TARGET_DIR/bin/couchdb -o /dev/stdout -e /dev/stderr
 Restart=always
 EOT
 
@@ -130,9 +149,9 @@ printf "\n=====================================================\n"
 echo Waiting for CouchDB Service:
 printf "=====================================================\n"
 
-COUNTER=30
+COUNTER=10
 
-while [[ $(eval "service couchdb status") != *'Active: active'* &&  $COUNTER -gt 1 ]]; do
+while [[ $(eval "service couchdb status") != *'active (running)'* &&  $COUNTER -gt 1 ]]; do
     ((COUNTER--))
     echo -ne "\rWaiting, $COUNTER seconds left.                      "
     sleep 1
@@ -143,20 +162,23 @@ if [ $COUNTER == 1 ]; then
     echo -ne "Try starting CouchDB manually using: \"sudo -i -u couchdb /home/couchdb/bin/couchdb\", to run CouchDB as the couchdb user.\n\n"
     exit
 else
-    echo -ne "\rCouchDB service is running.                                  \n"
+    echo -ne "\rCouchDB service is running.                                           \n"
 fi
 
 DB_ADDRESS="http://localhost:5984"
-DB_RESPONSE=$(curl -s -X GET $DB_ADDRESS)
 DB_CHECK_STR='"couchdb":"Welcome"'
-
 echo -ne "Querying CouchDB server on $DB_ADDRESS:"
-# echo "$DB_RESPONSE"
+
+sleep 3
+
+DB_RESPONSE=$(curl -s -X GET $DB_ADDRESS)
 
 if [[ "$DB_RESPONSE" == *$DB_CHECK_STR* ]]; then
-    echo -ne " OK"
+    echo -ne " OK\n"
+    echo -ne "CouchDB server is online.\n"
 else
     echo -ne " FAIL\n"
+    echo -ne " CouchDB server is offline.\n"
     echo -ne "Automatic CouchDB setup cannot continue.\n"
     echo -ne "Try starting CouchDB manually using: \"sudo -i -u couchdb /home/couchdb/bin/couchdb\", to run CouchDB as the couchdb user.\n\n"
     exit
@@ -166,17 +188,113 @@ printf "\n=====================================================\n"
 echo Performing Single Node Setup:
 printf "=====================================================\n"
 
+DB_CHECK_STR_OK='"ok":true'
+DB_CHECK_STR_EXISTS='"error":"file_exists"'
 
-# curl -X PUT http://127.0.0.1:5984/_users
+RESULT=$(curl -s -X PUT $DB_ADDRESS/_users)
+if [[ "$RESULT" == *$DB_CHECK_STR_OK* || "$RESULT" == *$DB_CHECK_STR_EXISTS* ]]; then
+    SUCCESS=1
+    echo 'Created _users database.'
+else
+    SUCCESS=0
+    echo 'Failed to create _users database.'
+fi
 
-# curl -X PUT http://127.0.0.1:5984/_replicator
+RESULT=$(curl -s -X PUT $DB_ADDRESS/_replicator)
+if [[ "$RESULT" == *$DB_CHECK_STR_OK* || "$RESULT" == *$DB_CHECK_STR_EXISTS* ]]; then
+    SUCCESS=1
+    echo Created _replicator database.
+else
+    SUCCESS=0
+    echo Failed to create _replicator database.
+fi
 
-# curl -X PUT http://127.0.0.1:5984/_global_changes
+RESULT=$(curl -s -X PUT $DB_ADDRESS/_global_changes)
+if [[ "$RESULT" == *$DB_CHECK_STR_OK* || "$RESULT" == *$DB_CHECK_STR_EXISTS* ]]; then
+    SUCCESS=1
+    echo Created _global_changes database.
+else
+    SUCCESS=0
+    echo Failed to create _global_changes database.
+fi
+
+if [ $SUCCESS == 0 ]; then
+    echo -ne "Single node setup failed. You'll need to do it manually.\n\n"
+    exit
+fi
 
 printf "\n=====================================================\n"
-echo Final Instructions:
+echo Creating Database Admin User:
 printf "=====================================================\n"
-echo Use \"sudo -i -u couchdb /home/couchdb/bin/couchdb\" to run CouchDB as the couchdb user.
 
+echo "Choose a username and password for the database administrator."
+echo "Avoid common usernames such as \"admin\" or \"root\"."
+echo "Use a strong password: min. 6 characters, should include both upper and"
+echo "lower case letters, numbers, and special characters."
+echo -ne "\n\n"
+
+DB_NODENAME="couchdb@localhost"
+DB_ADMIN_USERNAME=""
+DB_ADMIN_PASSWORD1=""
+DB_ADMIN_PASSWORD2=""
+
+while [[ "$DB_ADMIN_USERNAME" == "" ]]; do
+    echo "Username:"
+    read DB_ADMIN_USERNAME
+    if [[ "$DB_ADMIN_USERNAME" == "" ]]; then
+        echo -ne "\nYou must input a username. Try again.\n\n"
+    fi
+done
+
+while [[ "$DB_ADMIN_PASSWORD1" == "" ||
+        "$DB_ADMIN_PASSWORD1" != "$DB_ADMIN_PASSWORD2" ]]; do
+
+    echo "Password:"
+    read -s DB_ADMIN_PASSWORD1
+
+    echo "Verify password:"
+    read -s DB_ADMIN_PASSWORD2
+
+    if [[ "$DB_ADMIN_PASSWORD1" != "$DB_ADMIN_PASSWORD2" ]]; then
+        echo -ne "\nPasswords do not match. Try again.\n\n"
+    fi
+
+    if [[ "$DB_ADMIN_PASSWORD1" == "" ]]; then
+        echo -ne "\nYou must input a password. Try again.\n\n"
+    fi
+
+done
+
+RESULT=$(curl -s -X PUT http://localhost:5984/_node/$DB_NODENAME/_config/admins/$DB_ADMIN_USERNAME -d '"DB_ADMIN_PASSWORD1"')
+
+if [[ $RESULT == "\"\"" ]]; then
+    echo -ne "\nAdmin user \"$DB_ADMIN_USERNAME\" successfully created.\n"
+    SECURE=1
+else
+    echo -ne "\nError creating admin user \"$DB_ADMIN_USERNAME\".\n"
+    if [[ $RESULT == *'"error":"unauthorized'* ]]; then
+        echo -ne "\nIt appears an admin user already exists.\n"
+        SECURE=1
+    else
+        SECURE=0
+    fi
+
+    echo -ne "\nServer response: $RESULT.\n"
+fi
+
+if [[ $SECURE == 1 ]]; then
+    echo -ne "\nThe CouchDB \"Admin Party\" has been neutralized.\n"
+    echo -ne "\nYour CouchDB installation is now secure.\n"
+else
+    echo -ne "\nThe CouchDB \"Admin Party\" may be still ongoing.\n"
+    echo -ne "\nYour CouchDB installation is NOT SECURE, unless there is at least one admin.\n"
+    echo -ne "\nMAKE SURE THERE IS AN ADMIN USER OR CREATE AN ADMIN USER MANUALLY.\n"
+fi
+
+printf "\n=====================================================\n"
+echo Instructions:
+printf "=====================================================\n"
+echo -ne "CouchDB is running as a service. Use \"sudo service couchdb start|stop|restart|status\" to control it.\n\n"
+echo "Use \"sudo -i -u couchdb /home/couchdb/bin/couchdb\" to run CouchDB as the couchdb user in a normal process."
 
 printf "\n\n\nCOUCHDB 2.x INSTALLATION FINISHED.\n\n\n"
