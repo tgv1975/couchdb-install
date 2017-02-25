@@ -1,10 +1,17 @@
 #!/bin/bash
 # An installation script for CouchDB, for Ubuntu 16.04 Xenial 64-bit.
+# Arguments:
+#   -y                  Don't ask for confirmation.
+#   -upgrade-system     Perform apt-get upgrade && apt-get update
+#
 # Based on information from:
 #   http://docs.couchdb.org/en/2.0.0/install/unix.html
 #   http://docs.couchdb.org/en/2.0.0/install/
 #   http://docs.couchdb.org/en/2.0.0/cluster/nodes.html
 #   https://www.jamescoyle.net/how-to/2527-add-systemd-startup-script-for-couchdb
+#   http://stackoverflow.com/a/40409701
+#
+# MIT License - see LICENSE.txt
 
 
 USER=$(whoami)
@@ -13,10 +20,38 @@ if [ $USER != "root" ]; then
    exit
 fi
 
+isFlagSet() {
+    FLAG="-${1,,}"
+    shift
+
+    ARGS="${@}"
+
+    RESULT=0
+
+    for arg in $ARGS; do
+       if [[ "$FLAG" == "${arg,,}" ]]; then
+           RESULT=1
+       fi
+    done
+
+    return $RESULT
+}
+
+isServiceActive() {
+    if [[ $(eval "service couchdb status") != *'active (running)'* ]]; then
+        return 0
+    fi
+
+    return 1
+}
+
 printf "\n\nAbout to perform a CLEAN INSTALL of CouchDB 2.x on your system.\n"
 printf "This will erase any data you may have in the /home/couchdb dir.\n"
 
-if [[ $1 == '-y' || $1 == "-Y" ]]; then
+isFlagSet 'y' $@
+CONTINUE=$?
+
+if [[ $CONTINUE == 1 ]]; then
     CONTINUE='y'
 else
     printf "\n\nContinue? [y/n]\n"
@@ -29,21 +64,40 @@ fi
 
 printf "\n\n\nINSTALLING COUCHDB 2.x\n\n\n"
 
-systemctl stop couchdb.service
+printf "\n=====================================================\n"
+echo Stopping CouchDB Service:
+printf "=====================================================\n"
+
+systemctl stop couchdb.service &> /dev/null
 
 sleep 3
 
-printf "\n=====================================================\n"
-echo Upgrading the Package Manager:
-printf "=====================================================\n"
+isServiceActive
+SERVICE_ACTIVE=$?
 
-apt-get upgrade -y
+if [[ $SERVICE_ACTIVE == 1 ]]; then
+    echo "Could not stop CouchDB service. If install fails later on, stop the service manually and run the install again."
+else
+    echo "CouchDB service stopped."
+fi
 
-printf "\n=====================================================\n"
-echo Updating Packages:
-printf "=====================================================\n"
+isFlagSet 'upgrade-system' $@
+UPGRADE_SYSTEM=$?
 
-apt-get update -y
+if [[ $UPGRADE_SYSTEM == 1 ]]; then
+
+    printf "\n=====================================================\n"
+    echo Upgrading the Package Manager:
+    printf "=====================================================\n"
+
+    apt-get upgrade -y
+
+    printf "\n=====================================================\n"
+    echo Updating Packages:
+    printf "=====================================================\n"
+
+    apt-get update -y
+fi
 
 printf "\n=====================================================\n"
 echo Installing Dependencies:
@@ -149,11 +203,20 @@ printf "\n=====================================================\n"
 echo Waiting for CouchDB Service:
 printf "=====================================================\n"
 
-COUNTER=10
+cd "$TARGET_DIR"
 
-while [[ $(eval "service couchdb status") != *'active (running)'* &&  $COUNTER -gt 1 ]]; do
+COUNTER=15
+
+isServiceActive
+SERVICE_ACTIVE=$?
+
+while [[ $SERVICE_ACTIVE != 1 &&  $COUNTER -gt 1 ]]; do
     ((COUNTER--))
     echo -ne "\rWaiting, $COUNTER seconds left.                      "
+
+    isServiceActive
+    SERVICE_ACTIVE=$?
+
     sleep 1
 done
 
@@ -265,7 +328,10 @@ while [[ "$DB_ADMIN_PASSWORD1" == "" ||
 
 done
 
-RESULT=$(curl -s -X PUT http://localhost:5984/_node/$DB_NODENAME/_config/admins/$DB_ADMIN_USERNAME -d '"DB_ADMIN_PASSWORD1"')
+# CouchDB password needs to be wrapped in double quotes.
+DB_ADMIN_PASSWORD1=\""$DB_ADMIN_PASSWORD1"\"
+
+RESULT=$(curl -s -X PUT http://localhost:5984/_node/$DB_NODENAME/_config/admins/$DB_ADMIN_USERNAME -d $DB_ADMIN_PASSWORD1)
 
 if [[ $RESULT == "\"\"" ]]; then
     echo -ne "\nAdmin user \"$DB_ADMIN_USERNAME\" successfully created.\n"
@@ -295,6 +361,8 @@ printf "\n=====================================================\n"
 echo Instructions:
 printf "=====================================================\n"
 echo -ne "CouchDB is running as a service. Use \"sudo service couchdb start|stop|restart|status\" to control it.\n\n"
-echo "Use \"sudo -i -u couchdb /home/couchdb/bin/couchdb\" to run CouchDB as the couchdb user in a normal process."
+echo -ne "Use \"sudo -i -u couchdb /home/couchdb/bin/couchdb\" to run CouchDB as the couchdb user in a normal process.\n\n"
+echo -ne "To access this CouchDB server remotely, remember to set $TARGET_DIR/etc/local.ini bind_address field to an external IP!\n\n"
+echo -ne "Point your browser to http://[bind_address]:5984/_utils to access the Fauxton management UI."
 
 printf "\n\n\nCOUCHDB 2.x INSTALLATION FINISHED.\n\n\n"
