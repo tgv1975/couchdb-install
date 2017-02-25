@@ -16,7 +16,7 @@ Download the couchdb-install file and run it:
 
 `sudo ./couchdb-install`
 
-or, with both options enabled,
+or, with both options enabled:
 
 `sudo ./couchdb-install -y -upgrade-system`
 
@@ -25,6 +25,7 @@ The script will guide you further.
 Options (flags):
 
 `-y`: Don't prompt for confirmation upon running the install (see Warning below).
+
 `-upgrade-system`: The script will run `apt-get upgrade` and `apt-get update` prior to actually installing CouchDB. Updating the system is highly recommended before using the installer, because missing tools and dependencies will cause it to fail.
 
 
