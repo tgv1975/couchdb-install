@@ -148,7 +148,18 @@ TARGET_DIR=/home/couchdb
 
 rm -rf $TARGET_DIR
 cp -r $DOWNLOAD_DIR$ARCHIVE_DIRNAME/rel/couchdb $TARGET_DIR/
-echo 'Done.'
+COPY_SUCCESSFUL=$?
+
+if [[ $COPY_SUCCESSFUL == 0 ]]
+then
+    echo 'Done.'
+else
+    echo -ne "\n\nSomething went wrong: CouchDB build directoy not found in the expected location.\n"
+    echo "Please review the output above for further information."
+    echo "Some of the tools or dependencies required may be missing."
+    echo -ne "Run the installer again with the \"-upgrade-system\" flag, or run \"apt-get upgrade && apt-get\" update before running it again.\n\n"
+    exit
+fi
 
 printf "\n=====================================================\n"
 echo Creating CouchDB System User:
