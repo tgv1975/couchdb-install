@@ -111,7 +111,7 @@ printf "\n=====================================================\n"
 echo Downloading CouchDB:
 printf "=====================================================\n"
 
-DOWNLOAD_URL=http://apache.javapipe.com/couchdb/source/2.0.0/apache-couchdb-2.0.0.tar.gz
+DOWNLOAD_URL=http://apache.javapipe.com/couchdb/source/2.1.0/apache-couchdb-2.1.0.tar.gz
 DOWNLOAD_DIR=/tmp/couchdb/
 ARCHIVE_DIRNAME=apache-couchdb-2.0.0
 ARCHIVE_FILENAME=$ARCHIVE_DIRNAME.tar.gz
