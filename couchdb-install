@@ -113,7 +113,7 @@ printf "=====================================================\n"
 
 DOWNLOAD_URL=http://apache.javapipe.com/couchdb/source/2.1.0/apache-couchdb-2.1.0.tar.gz
 DOWNLOAD_DIR=/tmp/couchdb/
-ARCHIVE_DIRNAME=apache-couchdb-2.0.0
+ARCHIVE_DIRNAME=apache-couchdb-2.1.0
 ARCHIVE_FILENAME=$ARCHIVE_DIRNAME.tar.gz
 
 
@@ -154,7 +154,7 @@ if [[ $COPY_SUCCESSFUL == 0 ]]
 then
     echo 'Done.'
 else
-    echo -ne "\n\nSomething went wrong: CouchDB build directoy not found in the expected location.\n"
+    echo -ne "\n\nSomething went wrong: CouchDB build directory not found in the expected location.\n"
     echo "Please review the output above for further information."
     echo "Some of the tools or dependencies required may be missing."
     echo -ne "Run the installer again with the \"-upgrade-system\" flag, or run \"apt-get upgrade && apt-get\" update before running it again.\n\n"
