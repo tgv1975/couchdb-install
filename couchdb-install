@@ -2,7 +2,6 @@
 # An installation script for CouchDB, for Ubuntu 16.04 Xenial 64-bit.
 # Arguments:
 #   -y                  Don't ask for confirmation.
-#   -upgrade-system     Perform apt-get upgrade && apt-get update
 #
 # Based on information from:
 #   http://docs.couchdb.org/en/2.0.0/install/unix.html
@@ -38,15 +37,15 @@ isFlagSet() {
 }
 
 isServiceActive() {
-    if [[ $(eval "service couchdb status") != *'active (running)'* ]]; then
+    if [[ $(eval "sv status couchdb") != *'active (running)'* ]]; then
         return 0
     fi
 
     return 1
 }
 
-printf "\n\nAbout to perform a CLEAN INSTALL of CouchDB 2.x on your system.\n"
-printf "This will erase any data you may have in the /home/couchdb dir.\n"
+printf "\n\nAbout to install CouchDB 2.2.0 on your system.\n"
+printf "This may cause data loss by overwriting certain files.\n"
 
 isFlagSet 'y' $@
 CONTINUE=$?
@@ -62,159 +61,89 @@ if [[ $CONTINUE != 'y' && $CONTINUE != 'Y' ]]; then
     exit
 fi
 
-printf "\n\n\nINSTALLING COUCHDB 2.x\n\n\n"
+printf "\n\n\nINSTALLING COUCHDB 2.2.0\n\n\n"
 
 printf "\n=====================================================\n"
 echo Stopping CouchDB Service:
 printf "=====================================================\n"
 
-systemctl stop couchdb.service &> /dev/null
+# systemctl stop couchdb.service &> /dev/null
 
-sleep 3
+# sleep 3
 
-isServiceActive
-SERVICE_ACTIVE=$?
+# isServiceActive
+# SERVICE_ACTIVE=$?
 
-if [[ $SERVICE_ACTIVE == 1 ]]; then
-    echo "Could not stop CouchDB service. If install fails later on, stop the service manually and run the install again."
-else
-    echo "CouchDB service stopped."
+# if [[ $SERVICE_ACTIVE == 1 ]]; then
+#     echo "Could not stop CouchDB service. If install fails later on, stop the service manually and run the install again."
+# else
+#     echo "CouchDB service stopped."
+# fi
+
+printf "\n=====================================================\n"
+echo Preliminary Setup:
+printf "=====================================================\n"
+
+if [[ $(eval "grep \"deb https://apache.bintray.com/couchdb-deb bionic main\" /etc/apt/sources.list") == '' ]]; then
+    echo "deb https://apache.bintray.com/couchdb-deb bionic main" \
+        | sudo tee -a /etc/apt/sources.list
+
+    curl -L https://couchdb.apache.org/repo/bintray-pubkey.asc \
+        | sudo apt-key add -
 fi
 
-isFlagSet 'upgrade-system' $@
-UPGRADE_SYSTEM=$?
-
-if [[ $UPGRADE_SYSTEM == 1 ]]; then
-
-    printf "\n=====================================================\n"
-    echo Upgrading the Package Manager:
-    printf "=====================================================\n"
-
-    apt-get upgrade -y
-
-    printf "\n=====================================================\n"
-    echo Updating Packages:
-    printf "=====================================================\n"
-
-    apt-get update -y
-fi
+apt-get upgrade -y && apt-get update -y
 
 printf "\n=====================================================\n"
-echo Installing Dependencies:
+echo Installing CouchDB:
 printf "=====================================================\n"
 
-apt-get --no-install-recommends -y install \
-    build-essential pkg-config erlang \
-    libicu-dev libmozjs185-dev libcurl4-openssl-dev
-
-printf "\n=====================================================\n"
-echo Downloading CouchDB:
-printf "=====================================================\n"
-
-DOWNLOAD_URL=http://apache.javapipe.com/couchdb/source/2.1.0/apache-couchdb-2.1.0.tar.gz
-DOWNLOAD_DIR=/tmp/couchdb/
-ARCHIVE_DIRNAME=apache-couchdb-2.0.0
-ARCHIVE_FILENAME=$ARCHIVE_DIRNAME.tar.gz
-
-
-rm -rf $DOWNLOAD_DIR
-wget --directory-prefix=$DOWNLOAD_DIR $DOWNLOAD_URL
-
-printf "\n=====================================================\n"
-echo Decompressing Archive:
-printf "=====================================================\n"
-
-tar -xzvf $DOWNLOAD_DIR$ARCHIVE_FILENAME -C $DOWNLOAD_DIR
-
-
-printf "\n=====================================================\n"
-echo Running Configuration:
-printf "=====================================================\n"
-
-cd $DOWNLOAD_DIR$ARCHIVE_DIRNAME
-sh configure
-
-printf "\n=====================================================\n"
-echo Making CouchDB:
-printf "=====================================================\n"
-
-make release
-
-printf "\n=====================================================\n"
-echo Copying Files:
-printf "=====================================================\n"
-
-TARGET_DIR=/home/couchdb
-
-rm -rf $TARGET_DIR
-cp -r $DOWNLOAD_DIR$ARCHIVE_DIRNAME/rel/couchdb $TARGET_DIR/
-COPY_SUCCESSFUL=$?
-
-if [[ $COPY_SUCCESSFUL == 0 ]]
-then
-    echo 'Done.'
-else
-    echo -ne "\n\nSomething went wrong: CouchDB build directoy not found in the expected location.\n"
-    echo "Please review the output above for further information."
-    echo "Some of the tools or dependencies required may be missing."
-    echo -ne "Run the installer again with the \"-upgrade-system\" flag, or run \"apt-get upgrade && apt-get\" update before running it again.\n\n"
-    exit
-fi
-
-printf "\n=====================================================\n"
-echo Creating CouchDB System User:
-printf "=====================================================\n"
-
-adduser --system \
-        --no-create-home \
-        --shell /bin/bash \
-        --group --gecos \
-        "CouchDB Administrator" couchdb
-
-printf "\n=====================================================\n"
-echo Setting Permissions:
-printf "=====================================================\n"
-
-chown -R couchdb:couchdb $TARGET_DIR
-find $TARGET_DIR -type d -exec chmod 0770 {} \;
-chmod 0644 $TARGET_DIR/etc/*
-echo 'Done.'
-
-
-printf "\n=====================================================\n"
-echo Cleaning Up:
-printf "=====================================================\n"
-
-rm -rf $DOWNLOAD_DIR
-echo 'Done.'
+sudo apt-get install couchdb
 
 printf "\n=====================================================\n"
 echo Setting Up and Starting CouchDB service:
 printf "=====================================================\n"
 
-cat <<EOT > /etc/systemd/system/couchdb.service
-[Unit]
-Description=Couchdb service
-After=network.target
+apt-get install runit
 
-[Service]
-Type=simple
-User=couchdb
-ExecStart=$TARGET_DIR/bin/couchdb -o /dev/stdout -e /dev/stderr
-Restart=always
+printf "Creating runit-relevant directories...\n"
+# Log directory
+mkdir /var/log/couchdb
+chown couchdb:couchdb /var/log/couchdb
+
+# runit configuration and log dir
+mkdir /etc/sv/couchdb
+mkdir /etc/sv/couchdb/log
+
+# Script that determines where and how exactly logs will be written.
+cat <<EOT > /etc/sv/couchdb/log/run
+#!/bin/bash
+exec svlogd -tt /var/log/couchdb
 EOT
+# Make it executable.
+chmod u+x /etc/sv/couchdb/log/run
 
-systemctl  daemon-reload
-systemctl  start couchdb.service
-systemctl  enable couchdb.service
+# Script that determines how exactly CouchDB will be launched.
+# Feel free to add any additional arguments and environment
+# variables here if necessary.
+cat <<EOT > /etc/sv/couchdb/run
+#!/bin/bash
+export HOME=/home/couchdb
+exec 2>&1
+exec chpst -u couchdb /home/couchdb/bin/couchdb
+EOT
+#Make it executable.
+chmod u+x /etc/sv/couchdb/run
 
-echo 'Done.'
+printf "Creating runit service link...\n"
+ln -s /etc/sv/couchdb/ /etc/service/couchdb
+
+printf "Starting CouchDB service...\n"
+sv start couchdb
 
 printf "\n=====================================================\n"
 echo Waiting for CouchDB Service:
 printf "=====================================================\n"
-
-cd "$TARGET_DIR"
 
 COUNTER=15
 
@@ -236,7 +165,7 @@ if [ $COUNTER == 1 ]; then
     echo -ne "Try starting CouchDB manually using: \"sudo -i -u couchdb /home/couchdb/bin/couchdb\", to run CouchDB as the couchdb user.\n\n"
     exit
 else
-    echo -ne "\rCouchDB service is running.                                           \n"
+    echo -ne "\rCouchDB service is running.\n"
 fi
 
 DB_ADDRESS="http://localhost:5984"
@@ -259,121 +188,11 @@ else
 fi
 
 printf "\n=====================================================\n"
-echo Performing Single Node Setup:
-printf "=====================================================\n"
-
-DB_CHECK_STR_OK='"ok":true'
-DB_CHECK_STR_EXISTS='"error":"file_exists"'
-
-RESULT=$(curl -s -X PUT $DB_ADDRESS/_users)
-if [[ "$RESULT" == *$DB_CHECK_STR_OK* || "$RESULT" == *$DB_CHECK_STR_EXISTS* ]]; then
-    SUCCESS=1
-    echo 'Created _users database.'
-else
-    SUCCESS=0
-    echo 'Failed to create _users database.'
-fi
-
-RESULT=$(curl -s -X PUT $DB_ADDRESS/_replicator)
-if [[ "$RESULT" == *$DB_CHECK_STR_OK* || "$RESULT" == *$DB_CHECK_STR_EXISTS* ]]; then
-    SUCCESS=1
-    echo Created _replicator database.
-else
-    SUCCESS=0
-    echo Failed to create _replicator database.
-fi
-
-RESULT=$(curl -s -X PUT $DB_ADDRESS/_global_changes)
-if [[ "$RESULT" == *$DB_CHECK_STR_OK* || "$RESULT" == *$DB_CHECK_STR_EXISTS* ]]; then
-    SUCCESS=1
-    echo Created _global_changes database.
-else
-    SUCCESS=0
-    echo Failed to create _global_changes database.
-fi
-
-if [ $SUCCESS == 0 ]; then
-    echo -ne "Single node setup failed. You'll need to do it manually.\n\n"
-    exit
-fi
-
-printf "\n=====================================================\n"
-echo Creating Database Admin User:
-printf "=====================================================\n"
-
-echo "Choose a username and password for the database administrator."
-echo "Avoid common usernames such as \"admin\" or \"root\"."
-echo "Use a strong password: min. 6 characters, should include both upper and"
-echo "lower case letters, numbers, and special characters."
-echo -ne "\n\n"
-
-DB_NODENAME="couchdb@localhost"
-DB_ADMIN_USERNAME=""
-DB_ADMIN_PASSWORD1=""
-DB_ADMIN_PASSWORD2=""
-
-while [[ "$DB_ADMIN_USERNAME" == "" ]]; do
-    echo "Username:"
-    read DB_ADMIN_USERNAME
-    if [[ "$DB_ADMIN_USERNAME" == "" ]]; then
-        echo -ne "\nYou must input a username. Try again.\n\n"
-    fi
-done
-
-while [[ "$DB_ADMIN_PASSWORD1" == "" ||
-        "$DB_ADMIN_PASSWORD1" != "$DB_ADMIN_PASSWORD2" ]]; do
-
-    echo "Password:"
-    read -s DB_ADMIN_PASSWORD1
-
-    echo "Verify password:"
-    read -s DB_ADMIN_PASSWORD2
-
-    if [[ "$DB_ADMIN_PASSWORD1" != "$DB_ADMIN_PASSWORD2" ]]; then
-        echo -ne "\nPasswords do not match. Try again.\n\n"
-    fi
-
-    if [[ "$DB_ADMIN_PASSWORD1" == "" ]]; then
-        echo -ne "\nYou must input a password. Try again.\n\n"
-    fi
-
-done
-
-# CouchDB password needs to be wrapped in double quotes.
-DB_ADMIN_PASSWORD1=\""$DB_ADMIN_PASSWORD1"\"
-
-RESULT=$(curl -s -X PUT http://localhost:5984/_node/$DB_NODENAME/_config/admins/$DB_ADMIN_USERNAME -d $DB_ADMIN_PASSWORD1)
-
-if [[ $RESULT == "\"\"" ]]; then
-    echo -ne "\nAdmin user \"$DB_ADMIN_USERNAME\" successfully created.\n"
-    SECURE=1
-else
-    echo -ne "\nError creating admin user \"$DB_ADMIN_USERNAME\".\n"
-    if [[ $RESULT == *'"error":"unauthorized'* ]]; then
-        echo -ne "\nIt appears an admin user already exists.\n"
-        SECURE=1
-    else
-        SECURE=0
-    fi
-
-    echo -ne "\nServer response: $RESULT.\n"
-fi
-
-if [[ $SECURE == 1 ]]; then
-    echo -ne "\nThe CouchDB \"Admin Party\" has been neutralized.\n"
-    echo -ne "\nYour CouchDB installation is now secure.\n"
-else
-    echo -ne "\nThe CouchDB \"Admin Party\" may be still ongoing.\n"
-    echo -ne "\nYour CouchDB installation is NOT SECURE, unless there is at least one admin.\n"
-    echo -ne "\nMAKE SURE THERE IS AN ADMIN USER OR CREATE AN ADMIN USER MANUALLY.\n"
-fi
-
-printf "\n=====================================================\n"
 echo Instructions:
 printf "=====================================================\n"
-echo -ne "CouchDB is running as a service. Use \"sudo service couchdb start|stop|restart|status\" to control it.\n\n"
+echo -ne "CouchDB is running as a service. Use \"sv start couchdb|stop|status\" to control it.\n\n"
 echo -ne "Use \"sudo -i -u couchdb /home/couchdb/bin/couchdb\" to run CouchDB as the couchdb user in a normal process.\n\n"
-echo -ne "To access this CouchDB server remotely, remember to set $TARGET_DIR/etc/local.ini bind_address field to an external IP!\n\n"
+echo -ne "To access this CouchDB server remotely, remember to set the local.ini bind_address field to an external IP!\n\n"
 echo -ne "Point your browser to http://[bind_address]:5984/_utils to access the Fauxton management UI."
 
-printf "\n\n\nCOUCHDB 2.x INSTALLATION FINISHED.\n\n\n"
+printf "\n\n\nCOUCHDB 2.2.0 INSTALLATION FINISHED.\n\n\n"
