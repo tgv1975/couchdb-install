@@ -1,13 +1,15 @@
 # couchdb-install
 A straight-forward Bash script to install and configure CouchDB 2.2.0 on Ubuntu 18.04 Bionic Beaver 64-bit.
 
+[The old script, to install CouchDB 2.1.0 on Ubuntu 16.04 Xenial Xerus](https://github.com/tgv1975/couchdb-install/tree/xenial64-couchdb2.1.0)
+
 ### What it does
 
 * Upgrades apt and updates packages.
 * Installs the official CouchDB **package**.
 * Sets up CouchDB as a **service** that runs on system startup.
 * Creates the "couchdb" system **user**.
-* Checks CouchDB installation and attempts a **single node setup**.
+* Checks CouchDB installation.
 
 ### Usage
 Download the couchdb-install file and run it:
