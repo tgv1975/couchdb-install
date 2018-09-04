@@ -1,0 +1,184 @@
+#!/bin/bash
+# An installation script for CouchDB, for Ubuntu 18.04 Bionic Beaver 64-bit.
+# Arguments:
+#   -y                  Don't ask for confirmation.
+#
+# Based on information from:
+#   http://docs.couchdb.org/en/2.0.0/install/unix.html
+#   http://docs.couchdb.org/en/2.0.0/install/
+#   http://docs.couchdb.org/en/2.0.0/cluster/nodes.html
+#   https://www.jamescoyle.net/how-to/2527-add-systemd-startup-script-for-couchdb
+#   http://stackoverflow.com/a/40409701
+#
+# MIT License - see LICENSE.txt
+
+
+USER=$(whoami)
+if [ $USER != "root" ]; then
+   printf "\nYou must run this script as root.\n\n"
+   exit
+fi
+
+isFlagSet() {
+    FLAG="-${1,,}"
+    shift
+
+    ARGS="${@}"
+
+    RESULT=0
+
+    for arg in $ARGS; do
+       if [[ "$FLAG" == "${arg,,}" ]]; then
+           RESULT=1
+       fi
+    done
+
+    return $RESULT
+}
+
+isServiceActive() {
+    if [[ $(eval "service couchdb status") != *'active (running)'* ]]; then
+        return 0
+    fi
+
+    return 1
+}
+
+printf "\n=====================================================\n"
+printf "About to install CouchDB 2.2.0 on your system.\n"
+printf "This may cause data loss by overwriting certain files."
+printf "\n=====================================================\n"
+
+isFlagSet 'y' $@
+CONTINUE=$?
+
+if [[ $CONTINUE == 1 ]]; then
+    CONTINUE='y'
+else
+    printf "\nContinue? [y/n] "
+    read CONTINUE
+fi
+
+if [[ $CONTINUE != 'y' && $CONTINUE != 'Y' ]]; then
+    exit
+fi
+
+printf "\n\n\n~~~~~~~~~~~~~ INSTALLING COUCHDB 2.2.0 ~~~~~~~~~~~~~\n\n\n"
+
+printf "\n=====================================================\n"
+echo Stopping CouchDB Service:
+printf "=====================================================\n"
+
+systemctl stop couchdb.service &> /dev/null
+
+sleep 3
+
+isServiceActive
+SERVICE_ACTIVE=$?
+
+if [[ $SERVICE_ACTIVE == 1 ]]; then
+    echo "Could not stop CouchDB service. If install fails later on, stop the service manually and run the install again."
+else
+    echo "CouchDB service stopped."
+fi
+
+printf "\n=====================================================\n"
+echo Preliminary Setup:
+printf "=====================================================\n"
+
+if [[ $(eval "grep \"deb https://apache.bintray.com/couchdb-deb bionic main\" /etc/apt/sources.list") == '' ]]; then
+    echo "deb https://apache.bintray.com/couchdb-deb bionic main" \
+        | sudo tee -a /etc/apt/sources.list
+
+    curl -L https://couchdb.apache.org/repo/bintray-pubkey.asc \
+        | sudo apt-key add -
+fi
+
+apt-get upgrade && apt-get update
+
+printf "\n=====================================================\n"
+echo Installing CouchDB:
+printf "=====================================================\n"
+
+apt-get install couchdb
+
+printf "\n=====================================================\n"
+echo Setting Up and Starting CouchDB service:
+printf "=====================================================\n"
+
+cat <<EOT > /etc/systemd/system/couchdb.service
+[Unit]
+Description=Couchdb service
+After=network.target
+
+[Service]
+Type=simple
+User=couchdb
+ExecStart= /opt/couchdb/bin/couchdb -o /dev/stdout -e /dev/stderr
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+EOT
+
+systemctl  daemon-reload
+systemctl  start couchdb.service
+systemctl  enable couchdb.service
+
+echo 'Done.'
+
+printf "\n=====================================================\n"
+echo Waiting for CouchDB Service:
+printf "=====================================================\n"
+
+COUNTER=15
+
+isServiceActive
+SERVICE_ACTIVE=$?
+
+while [[ $SERVICE_ACTIVE != 1 &&  $COUNTER -gt 1 ]]; do
+    ((COUNTER--))
+    echo -ne "\rWaiting, $COUNTER seconds left.                      "
+
+    isServiceActive
+    SERVICE_ACTIVE=$?
+
+    sleep 1
+done
+
+if [ $COUNTER == 1 ]; then
+    echo -ne "\rCouchDB service not running.\nAutomatic CouchDB setup cannot continue.\n"
+    echo -ne "Try starting CouchDB manually using: \"sudo -i -u couchdb /home/couchdb/bin/couchdb\", to run CouchDB as the couchdb user.\n\n"
+    exit
+else
+    echo -ne "\rCouchDB service is running.\n"
+fi
+
+DB_ADDRESS="http://localhost:5984"
+DB_CHECK_STR='"couchdb":"Welcome"'
+echo -ne "Querying CouchDB server on $DB_ADDRESS:"
+
+sleep 3
+
+DB_RESPONSE=$(curl -s -X GET $DB_ADDRESS)
+
+if [[ "$DB_RESPONSE" == *$DB_CHECK_STR* ]]; then
+    echo -ne " OK\n"
+    echo -ne "CouchDB server is online.\n"
+else
+    echo -ne " FAIL\n"
+    echo -ne " CouchDB server is offline.\n"
+    echo -ne "Automatic CouchDB setup cannot continue.\n"
+    echo -ne "Try starting CouchDB manually using: \"sudo -i -u couchdb /opt/couchdb/bin/couchdb\", to run CouchDB as the couchdb user.\n\n"
+    exit
+fi
+
+printf "\n=====================================================\n"
+echo Instructions:
+printf "=====================================================\n"
+echo -ne "CouchDB is running as a service. Use \"service couchdb start|stop|restart\status\" to control it.\n\n"
+echo -ne "Use \"sudo -i -u couchdb /opt/couchdb/bin/couchdb\" to run CouchDB as the couchdb user in a normal process.\n\n"
+echo -ne "To access this CouchDB server remotely, remember to set the local.ini bind_address field to an external IP!\n\n"
+echo -ne "Point your browser to http://[bind_address]:5984/_utils to access the Fauxton management UI."
+
+printf "\n\n\nCOUCHDB 2.2.0 INSTALLATION FINISHED.\n\n\n"
